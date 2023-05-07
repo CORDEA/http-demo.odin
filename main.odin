@@ -33,7 +33,15 @@ generate_header :: proc(method, host, path: string, queries: map[string]string) 
 }
 
 http_get :: proc(host, path: string, queries: map[string]string) -> (err: net.Network_Error) {
+    socket: net.TCP_Socket
+    if socket, err = net.dial_tcp(host, 80); err != nil {
+        return err
+    }
     header := generate_header("GET", host, path, queries)
+    bytes: int
+    if bytes, err = net.send_tcp(socket, transmute([]u8)header); err != nil {
+        return err
+    }
     return nil
 }
 
