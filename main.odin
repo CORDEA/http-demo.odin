@@ -32,6 +32,31 @@ generate_header :: proc(method, host, path: string, queries: map[string]string) 
     return to_string(b)
 }
 
+handle_response :: proc(socket: net.TCP_Socket) -> (response: string, err: net.Network_Error) {
+    using strings
+    b := builder_make()
+    buf: [1]byte
+    for {
+        r: int
+        if r, err = net.recv_tcp(socket, buf[:]); err != nil {
+            return "", err
+        }
+        if r <= 0 {
+            return to_string(b), nil
+        }
+        if buf[0] != '\r' {
+            write_bytes(&b, buf[:])
+            continue
+        }
+        if r, err = net.recv_tcp(socket, buf[:]); err != nil {
+            return "", err
+        }
+        if buf[0] == '\n' {
+            return to_string(b), nil
+        }
+    }
+}
+
 http_get :: proc(host, path: string, queries: map[string]string) -> (err: net.Network_Error) {
     socket: net.TCP_Socket
     if socket, err = net.dial_tcp(host, 80); err != nil {
@@ -42,6 +67,11 @@ http_get :: proc(host, path: string, queries: map[string]string) -> (err: net.Ne
     if bytes, err = net.send_tcp(socket, transmute([]u8)header); err != nil {
         return err
     }
+    response: string
+    if response, err = handle_response(socket); err != nil {
+        return err
+    }
+    net.close(socket)
     return nil
 }
 
