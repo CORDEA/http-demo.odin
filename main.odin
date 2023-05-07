@@ -10,7 +10,23 @@ USER_AGENT :: "Odin/9f39209"
 generate_header :: proc(method, host, path: string, queries: map[string]string) -> string {
     using strings
     b := builder_make()
-    write_string(&b, fmt.tprintf("GET %s HTTP/1.1\r\n", path))
+    write_string(&b, fmt.tprintf("GET %s", path))
+
+    query_len := len(queries);
+    if query_len > 0 {
+        write_string(&b, "?")
+        i := 0
+        for k, v in queries {
+            if i >= query_len - 1 {
+                write_string(&b, fmt.tprintf("%s=%s", k, v))
+                break
+            }
+            write_string(&b, fmt.tprintf("%s=%s&", k, v))
+            i += 1
+        }
+    }
+
+    write_string(&b, " HTTP/1.1\r\n")
     write_string(&b, fmt.tprintf("Host: %s\r\n", host))
     write_string(&b, fmt.tprintf("User-Agent: %s\r\n\r\n", USER_AGENT))
     return to_string(b)
