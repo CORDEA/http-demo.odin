@@ -10,7 +10,7 @@ USER_AGENT :: "Odin/9f39209"
 generate_header :: proc(method, host, path: string, queries: map[string]string) -> string {
     using strings
     b := builder_make()
-    write_string(&b, fmt.tprintf("GET %s", path))
+    write_string(&b, fmt.tprintf("%s %s", method, path))
 
     query_len := len(queries);
     if query_len > 0 {
