@@ -2,6 +2,7 @@ package main
 
 import "core:fmt"
 import "core:strings"
+import "core:mem"
 import "core:net"
 import "core:os"
 
@@ -70,6 +71,18 @@ handle_header :: proc(socket: net.TCP_Socket) -> (header: [dynamic]string, err: 
     }
 }
 
+header_to_map :: proc(list: [dynamic]string) -> (header: map[string]string, err: mem.Allocator_Error) {
+    using strings
+    for l in list {
+        h: []string
+        if h, err = split_n(l, ":", 2); err != nil {
+            return header, err
+        }
+        header[trim_space(h[0])] = trim_space(h[1])
+    }
+    return header, nil
+}
+
 http_get :: proc(host, path: string, queries: map[string]string) -> (err: net.Network_Error) {
     socket: net.TCP_Socket
     if socket, err = net.dial_tcp(host, 80); err != nil {
@@ -84,10 +97,11 @@ http_get :: proc(host, path: string, queries: map[string]string) -> (err: net.Ne
     if status, err = recv_line_tcp(socket); err != nil {
         return err
     }
-    header: [dynamic]string
-    if header, err = handle_header(socket); err != nil {
+    raw: [dynamic]string
+    if raw, err = handle_header(socket); err != nil {
         return err
     }
+    header, aerr := header_to_map(raw)
     net.close(socket)
     return nil
 }
