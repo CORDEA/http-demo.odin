@@ -2,13 +2,22 @@ package main
 
 import "core:fmt"
 import "core:strings"
+import "core:strconv"
 import "core:mem"
 import "core:net"
 import "core:os"
 
 USER_AGENT :: "Odin/9f39209"
 
+Http_Error :: enum {
+    None,
+
+    Http_ContentLength_Not_Exist,
+    Http_ContentLength_Not_Match,
+}
+
 Error :: union #shared_nil {
+    Http_Error,
     net.Network_Error,
     mem.Allocator_Error,
 }
@@ -77,13 +86,38 @@ header_to_map :: proc(list: [dynamic]string) -> (header: map[string]string, err:
     return header, nil
 }
 
+handle_response :: proc(socket: net.TCP_Socket, length: int) -> (response: string, err: net.Network_Error) {
+    using strings
+    b := builder_make()
+    buf: [1]byte
+    for i := 0; i < length; i += 1 {
+        r := net.recv_tcp(socket, buf[:]) or_return
+        if r <= 0 {
+            return to_string(b), nil
+        }
+        write_bytes(&b, buf[:])
+    }
+    return to_string(b), nil
+}
+
 http_get :: proc(host, path: string, queries: map[string]string) -> (err: Error) {
     socket := net.dial_tcp(host, 80) or_return
+
     rheader := generate_header("GET", host, path, queries)
     bytes := net.send_tcp(socket, transmute([]u8)rheader) or_return
+
     status := recv_line_tcp(socket) or_return
     raw := handle_header(socket) or_return
     header := header_to_map(raw) or_return
+
+    length, ok := strconv.parse_int(header["Content-Length"])
+    if !ok {
+        return .Http_ContentLength_Not_Exist
+    }
+    response := handle_response(socket, length) or_return
+    if len(response) != length {
+        return .Http_ContentLength_Not_Match
+    }
     net.close(socket)
     return nil
 }
