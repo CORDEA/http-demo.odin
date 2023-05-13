@@ -57,19 +57,17 @@ recv_line_tcp :: proc(socket: net.TCP_Socket) -> (response: string, err: net.Net
     }
 }
 
-handle_response :: proc(socket: net.TCP_Socket) -> (response: string, err: net.Network_Error) {
-    using strings
-    b := builder_make()
+handle_header :: proc(socket: net.TCP_Socket) -> (header: [dynamic]string, err: net.Network_Error) {
     for {
         l: string
         if l, err = recv_line_tcp(socket); err != nil {
-            return to_string(b), err
+            return header, err
         }
         if len(l) <= 0 {
+            return header, nil
         }
-        write_string(&b, l)
+        append(&header, l)
     }
-    return to_string(b), nil
 }
 
 http_get :: proc(host, path: string, queries: map[string]string) -> (err: net.Network_Error) {
@@ -77,13 +75,17 @@ http_get :: proc(host, path: string, queries: map[string]string) -> (err: net.Ne
     if socket, err = net.dial_tcp(host, 80); err != nil {
         return err
     }
-    header := generate_header("GET", host, path, queries)
+    rheader := generate_header("GET", host, path, queries)
     bytes: int
-    if bytes, err = net.send_tcp(socket, transmute([]u8)header); err != nil {
+    if bytes, err = net.send_tcp(socket, transmute([]u8)rheader); err != nil {
         return err
     }
-    response: string
-    if response, err = handle_response(socket); err != nil {
+    status: string
+    if status, err = recv_line_tcp(socket); err != nil {
+        return err
+    }
+    header: [dynamic]string
+    if header, err = handle_header(socket); err != nil {
         return err
     }
     net.close(socket)
