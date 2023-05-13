@@ -8,6 +8,11 @@ import "core:os"
 
 USER_AGENT :: "Odin/9f39209"
 
+Error :: union #shared_nil {
+    net.Network_Error,
+    mem.Allocator_Error,
+}
+
 generate_header :: proc(method, host, path: string, queries: map[string]string) -> string {
     using strings
     b := builder_make()
@@ -38,10 +43,7 @@ recv_line_tcp :: proc(socket: net.TCP_Socket) -> (response: string, err: net.Net
     b := builder_make()
     buf: [1]byte
     for {
-        r: int
-        if r, err = net.recv_tcp(socket, buf[:]); err != nil {
-            return "", err
-        }
+        r := net.recv_tcp(socket, buf[:]) or_return
         if r <= 0 {
             return to_string(b), nil
         }
@@ -49,9 +51,7 @@ recv_line_tcp :: proc(socket: net.TCP_Socket) -> (response: string, err: net.Net
             write_bytes(&b, buf[:])
             continue
         }
-        if r, err = net.recv_tcp(socket, buf[:]); err != nil {
-            return "", err
-        }
+        r = net.recv_tcp(socket, buf[:]) or_return
         if buf[0] == '\n' {
             return to_string(b), nil
         }
@@ -60,10 +60,7 @@ recv_line_tcp :: proc(socket: net.TCP_Socket) -> (response: string, err: net.Net
 
 handle_header :: proc(socket: net.TCP_Socket) -> (header: [dynamic]string, err: net.Network_Error) {
     for {
-        l: string
-        if l, err = recv_line_tcp(socket); err != nil {
-            return header, err
-        }
+        l := recv_line_tcp(socket) or_return
         if len(l) <= 0 {
             return header, nil
         }
@@ -74,34 +71,19 @@ handle_header :: proc(socket: net.TCP_Socket) -> (header: [dynamic]string, err: 
 header_to_map :: proc(list: [dynamic]string) -> (header: map[string]string, err: mem.Allocator_Error) {
     using strings
     for l in list {
-        h: []string
-        if h, err = split_n(l, ":", 2); err != nil {
-            return header, err
-        }
+        h := split_n(l, ":", 2) or_return
         header[trim_space(h[0])] = trim_space(h[1])
     }
     return header, nil
 }
 
-http_get :: proc(host, path: string, queries: map[string]string) -> (err: net.Network_Error) {
-    socket: net.TCP_Socket
-    if socket, err = net.dial_tcp(host, 80); err != nil {
-        return err
-    }
+http_get :: proc(host, path: string, queries: map[string]string) -> (err: Error) {
+    socket := net.dial_tcp(host, 80) or_return
     rheader := generate_header("GET", host, path, queries)
-    bytes: int
-    if bytes, err = net.send_tcp(socket, transmute([]u8)rheader); err != nil {
-        return err
-    }
-    status: string
-    if status, err = recv_line_tcp(socket); err != nil {
-        return err
-    }
-    raw: [dynamic]string
-    if raw, err = handle_header(socket); err != nil {
-        return err
-    }
-    header, aerr := header_to_map(raw)
+    bytes := net.send_tcp(socket, transmute([]u8)rheader) or_return
+    status := recv_line_tcp(socket) or_return
+    raw := handle_header(socket) or_return
+    header := header_to_map(raw) or_return
     net.close(socket)
     return nil
 }
