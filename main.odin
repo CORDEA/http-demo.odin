@@ -22,6 +22,12 @@ Error :: union #shared_nil {
     mem.Allocator_Error,
 }
 
+Http_Response :: struct {
+    status: string,
+    header: map[string]string,
+    body: string,
+}
+
 generate_header :: proc(method, host, path: string, queries: map[string]string) -> string {
     using strings
     b := builder_make()
@@ -86,7 +92,7 @@ header_to_map :: proc(list: [dynamic]string) -> (header: map[string]string, err:
     return header, nil
 }
 
-handle_response :: proc(socket: net.TCP_Socket, length: int) -> (response: string, err: net.Network_Error) {
+handle_body:: proc(socket: net.TCP_Socket, length: int) -> (response: string, err: net.Network_Error) {
     using strings
     b := builder_make()
     buf: [1]byte
@@ -100,7 +106,7 @@ handle_response :: proc(socket: net.TCP_Socket, length: int) -> (response: strin
     return to_string(b), nil
 }
 
-http_get :: proc(host, path: string, queries: map[string]string) -> (err: Error) {
+http_get :: proc(host, path: string, queries: map[string]string) -> (response: Http_Response, err: Error) {
     socket := net.dial_tcp(host, 80) or_return
 
     rheader := generate_header("GET", host, path, queries)
@@ -112,14 +118,26 @@ http_get :: proc(host, path: string, queries: map[string]string) -> (err: Error)
 
     length, ok := strconv.parse_int(header["Content-Length"])
     if !ok {
-        return .Http_ContentLength_Not_Exist
+        return {
+            status,
+            header,
+            ""
+        }, .Http_ContentLength_Not_Exist
     }
-    response := handle_response(socket, length) or_return
-    if len(response) != length {
-        return .Http_ContentLength_Not_Match
+    body := handle_body(socket, length) or_return
+    if len(body) != length {
+        return {
+            status,
+            header,
+            ""
+        }, .Http_ContentLength_Not_Match
     }
     net.close(socket)
-    return nil
+    return {
+        status,
+        header,
+        body
+    }, nil
 }
 
 main :: proc() {
@@ -131,8 +149,11 @@ main :: proc() {
     if scheme != "http" {
         return
     }
-    err := http_get(host, path, queries)
+    response, err := http_get(host, path, queries)
     if err != nil {
         fmt.println(err)
     }
+
+    fmt.println(response.status)
+    fmt.println(response.body)
 }
