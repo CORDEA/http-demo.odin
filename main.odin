@@ -32,7 +32,7 @@ generate_header :: proc(method, host, path: string, queries: map[string]string) 
     return to_string(b)
 }
 
-handle_response :: proc(socket: net.TCP_Socket) -> (response: string, err: net.Network_Error) {
+recv_line_tcp :: proc(socket: net.TCP_Socket) -> (response: string, err: net.Network_Error) {
     using strings
     b := builder_make()
     buf: [1]byte
@@ -55,6 +55,21 @@ handle_response :: proc(socket: net.TCP_Socket) -> (response: string, err: net.N
             return to_string(b), nil
         }
     }
+}
+
+handle_response :: proc(socket: net.TCP_Socket) -> (response: string, err: net.Network_Error) {
+    using strings
+    b := builder_make()
+    for {
+        l: string
+        if l, err = recv_line_tcp(socket); err != nil {
+            return to_string(b), err
+        }
+        if len(l) <= 0 {
+        }
+        write_string(&b, l)
+    }
+    return to_string(b), nil
 }
 
 http_get :: proc(host, path: string, queries: map[string]string) -> (err: net.Network_Error) {
